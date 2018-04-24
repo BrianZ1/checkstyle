@@ -516,16 +516,16 @@ public final class ConfigurationLoader {
         int pos = value.indexOf(DOLLAR_SIGN, prev);
         while (pos >= 0) {
             //if there was any text before this, add it as a fragment
-            if (pos > 0) {
+            if (isTextBeforeThis(pos)) {
                 fragments.add(value.substring(prev, pos));
             }
             //if we are at the end of the string, we tack on a $
             //then move past it
-            if (pos == value.length() - 1) {
+            if (isAtEndOfString(value, pos)) {
                 fragments.add(String.valueOf(DOLLAR_SIGN));
                 prev = pos + 1;
             }
-            else if (value.charAt(pos + 1) == '{') {
+            else if (isEndCurly(value, pos)) {
                 //property found, extract its name or bail on a typo
                 final int endName = value.indexOf('}', pos);
                 if (endName == -1) {
@@ -538,7 +538,7 @@ public final class ConfigurationLoader {
                 prev = endName + 1;
             }
             else {
-                if (value.charAt(pos + 1) == DOLLAR_SIGN) {
+                if (isEndDollar(value, pos)) {
                     //backwards compatibility two $ map to one mode
                     fragments.add(String.valueOf(DOLLAR_SIGN));
                     prev = pos + 2;
@@ -555,9 +555,29 @@ public final class ConfigurationLoader {
         }
         //no more $ signs found
         //if there is any tail to the file, append it
-        if (prev < value.length()) {
+        if (noMoreDollar(value, prev)) {
             fragments.add(value.substring(prev));
         }
+    }
+    
+    public static boolean isTextBeforeThis(int pos) {
+    	return pos > 0;
+    }
+    
+    public static boolean isAtEndOfString(String value, int pos) {
+    	return pos == value.length() - 1;
+    }
+    
+    public static boolean isEndCurly(String value, int pos) {
+    	return value.charAt(pos + 1) == '{';
+    }
+    
+    public static boolean isEndDollar(String value, int pos) {
+    	return value.charAt(pos + 1) == DOLLAR_SIGN;
+    }
+    
+    public static boolean noMoreDollar(String value, int prev) {
+    	return prev < value.length();
     }
 
     /**
@@ -603,57 +623,69 @@ public final class ConfigurationLoader {
                                  Attributes attributes)
                 throws SAXException {
             if (qName.equals(MODULE)) {
-                //create configuration
-                final String originalName = attributes.getValue(NAME);
-                final String name = threadModeSettings.resolveName(originalName);
-                final DefaultConfiguration conf =
-                    new DefaultConfiguration(name, threadModeSettings);
-
-                if (configuration == null) {
-                    configuration = conf;
-                }
-
-                //add configuration to it's parent
-                if (!configStack.isEmpty()) {
-                    final DefaultConfiguration top =
-                        configStack.peek();
-                    top.addChild(conf);
-                }
-
-                configStack.push(conf);
+            	nameIsModule(attributes);
             }
             else if (qName.equals(PROPERTY)) {
-                //extract value and name
-                final String value;
-                try {
-                    value = replaceProperties(attributes.getValue(VALUE),
-                        overridePropsResolver, attributes.getValue(DEFAULT));
-                }
-                catch (final CheckstyleException ex) {
-                    // -@cs[IllegalInstantiation] SAXException is in the overridden method signature
-                    throw new SAXException(ex);
-                }
-                final String name = attributes.getValue(NAME);
-
-                //add to attributes of configuration
-                final DefaultConfiguration top =
-                    configStack.peek();
-                top.addAttribute(name, value);
+            	nameIsProperty(attributes);
             }
             else if (qName.equals(MESSAGE)) {
-                //extract key and value
-                final String key = attributes.getValue(KEY);
-                final String value = attributes.getValue(VALUE);
-
-                //add to messages of configuration
-                final DefaultConfiguration top = configStack.peek();
-                top.addMessage(key, value);
+            	nameIsMessage(attributes);
             }
             else {
                 if (!qName.equals(METADATA)) {
                     throw new IllegalStateException("Unknown name:" + qName + ".");
                 }
             }
+        }
+        
+        public void nameIsModule(Attributes attributes) {
+            //create configuration
+            final String originalName = attributes.getValue(NAME);
+            final String name = threadModeSettings.resolveName(originalName);
+            final DefaultConfiguration conf =
+                new DefaultConfiguration(name, threadModeSettings);
+
+            if (configuration == null) {
+                configuration = conf;
+            }
+
+            //add configuration to it's parent
+            if (!configStack.isEmpty()) {
+                final DefaultConfiguration top =
+                    configStack.peek();
+                top.addChild(conf);
+            }
+
+            configStack.push(conf);
+        }
+        
+        public void nameIsProperty(Attributes attributes) throws SAXException {
+            //extract value and name
+            final String value;
+            try {
+                value = replaceProperties(attributes.getValue(VALUE),
+                    overridePropsResolver, attributes.getValue(DEFAULT));
+            }
+            catch (final CheckstyleException ex) {
+                // -@cs[IllegalInstantiation] SAXException is in the overridden method signature
+                throw new SAXException(ex);
+            }
+            final String name = attributes.getValue(NAME);
+
+            //add to attributes of configuration
+            final DefaultConfiguration top =
+                configStack.peek();
+            top.addAttribute(name, value);
+        }
+        
+        public void nameIsMessage(Attributes attributes) {
+            //extract key and value
+            final String key = attributes.getValue(KEY);
+            final String value = attributes.getValue(VALUE);
+
+            //add to messages of configuration
+            final DefaultConfiguration top = configStack.peek();
+            top.addMessage(key, value);
         }
 
         @Override
